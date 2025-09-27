@@ -12,8 +12,11 @@ import {
   Zap,
   ArrowRight
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const DashboardOverview = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-8">
       {/* Welcome Section */}
@@ -26,7 +29,7 @@ const DashboardOverview = () => {
             Aqui está um resumo da sua atividade hoje
           </p>
         </div>
-        <Button variant="gradient" className="group">
+        <Button variant="gradient" className="group" onClick={() => navigate('/dashboard/create')}>
           <Plus className="mr-2 h-4 w-4" />
           Criar Novo Post
           <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -175,7 +178,7 @@ const DashboardOverview = () => {
             <CardTitle>Ações Rápidas</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button variant="outline" className="w-full justify-start h-auto p-4">
+            <Button variant="outline" className="w-full justify-start h-auto p-4" onClick={() => navigate('/dashboard/create')}>
               <div className="flex items-center space-x-4">
                 <div className="p-2 rounded-lg gradient-primary">
                   <Plus className="h-5 w-5 text-white" />
