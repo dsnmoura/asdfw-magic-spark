@@ -8,6 +8,34 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Configurações dos modelos disponíveis
+type ModelConfig = {
+  name: string;
+  provider: string;
+  fast: boolean;
+  cost: string;
+};
+
+const AI_MODELS: Record<string, ModelConfig> = {
+  'gpt-4o-mini': {
+    name: 'GPT-4o Mini',
+    provider: 'openai',
+    fast: true,
+    cost: 'low'
+  },
+  'gpt-4o': {
+    name: 'GPT-4o',
+    provider: 'openai',
+    fast: false,
+    cost: 'medium'
+  },
+  'claude-3-sonnet': {
+    name: 'Claude 3 Sonnet',
+    provider: 'anthropic',
+    fast: true,
+    cost: 'medium'
+  }
+};
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -21,41 +49,52 @@ serve(async (req) => {
       network, 
       template, 
       theme, 
+      content,
+      model = 'gpt-4o-mini',
       generateImages = true,
       generateCaption = true,
-      generateHashtags = true
+      generateHashtags = true,
+      customPrompt = null
     } = await req.json();
 
-    const model = 'gpt-4o-mini'; // Modelo fixo
-
-    console.log('Generating post content:', { objective, network, template, theme, model });
+    console.log('Generating AI content:', { 
+      objective, 
+      network, 
+      template, 
+      theme, 
+      model,
+      contentLength: content?.length || 0
+    });
 
     if (!openRouterApiKey) {
       throw new Error('OpenRouter API key not configured');
     }
 
-    let systemPrompt = `Você é um especialista em marketing digital e criação de conteúdo para redes sociais. Sua especialidade é criar posts engajantes e persuasivos.
+    // Use o conteúdo fornecido ou o tema como fallback
+    const contentToProcess = content || theme || objective;
+
+    let systemPrompt = `Você é um especialista em marketing digital e criação de conteúdo para redes sociais. Sua especialidade é criar posts engajantes e persuasivos que geram resultados.
 
 Você deve gerar conteúdo baseado nos seguintes parâmetros:
-- Objetivo: ${objective}
 - Rede Social: ${network}
-- Template: ${template}
-- Tema: ${theme}
+- Formato/Template: ${template}
+- Conteúdo/Tema: ${contentToProcess}
+${objective ? `- Objetivo: ${objective}` : ''}
 
-Responda SEMPRE em JSON válido com as seguintes chaves:`;
+IMPORTANTE: Responda SEMPRE em JSON válido com as seguintes chaves:`;
 
     const requestedContent = [];
     
     if (generateImages) {
-      requestedContent.push(`"carousel_prompts": [array de 3-5 prompts detalhados em inglês para geração de imagens do carrossel, cada prompt deve ser específico e visual]`);
+      requestedContent.push(`"carousel_prompts": [array de 3-5 prompts detalhados em inglês para geração de imagens do carrossel, cada prompt deve ser específico, visual e adequado para ${network}]`);
     }
     
     if (generateCaption) {
-      requestedContent.push(`"caption": "texto da legenda em português, engajante e persuasivo, adequado para ${network}"`);
+      requestedContent.push(`"caption": "legenda em português, engajante e persuasiva, otimizada para ${network}"`);
     }
     
     if (generateHashtags) {
-      requestedContent.push(`"hashtags": [array de 8-15 hashtags relevantes e otimizadas para ${network}]`);
+      requestedContent.push(`"hashtags": [array de 10-15 hashtags relevantes e estratégicas para ${network}]`);
     }
 
     systemPrompt += `
@@ -63,13 +102,42 @@ Responda SEMPRE em JSON válido com as seguintes chaves:`;
   ${requestedContent.join(',\n  ')}
 }
 
-Diretrizes importantes:
-- Carousel prompts devem ser em inglês, detalhados e visuais
-- Caption deve ser em português, envolvente e incluir CTA
-- Hashtags devem ser uma mistura de populares e nicho
-- Adapte o tom para a rede social escolhida
-- Use emojis apropriados na caption
-- Para ${network}, considere as melhores práticas da plataforma`;
+DIRETRIZES ESPECÍFICAS POR REDE SOCIAL:
+
+${network === 'instagram' ? `
+INSTAGRAM:
+- Caption: Max 2200 caracteres, use quebras de linha, emojis estratégicos
+- Inclua CTA claro (curtir, comentar, compartilhar, salvar)
+- Prompts de imagem: Foque em aspectos visuais, cores vibrantes, composição atrativa
+- Hashtags: Mix de populares (#love #instagood) e nicho específico
+` : ''}
+
+${network === 'linkedin' ? `
+LINKEDIN:
+- Caption: Tom profissional mas acessível, max 3000 caracteres
+- Inclua insights valiosos, dados ou dicas práticas
+- CTA para engagement profissional (compartilhar experiência, opinar)
+- Prompts de imagem: Profissionais, corporativos, infográficos
+- Hashtags: Focadas em negócios, indústria e profissional
+` : ''}
+
+${network === 'tiktok' ? `
+TIKTOK:
+- Caption: Concisa, max 2200 caracteres, trending language
+- Use gírias atuais e linguagem jovem
+- CTA para viralização (duet, stitch, trend)
+- Prompts de imagem: Dinâmicas, coloridas, para vídeos curtos
+- Hashtags: Trending hashtags + nicho específico
+` : ''}
+
+Adaptações por template:
+- Post Feed: Foco em engajamento e valor
+- Stories: Mais casual, interativo, urgência
+- Reels/Vídeos: Dinâmico, entretenimento, viralização
+
+${customPrompt ? `\nINSTRUÇÕES PERSONALIZADAS: ${customPrompt}` : ''}`;
+
+    const userPrompt = customPrompt || `Crie conteúdo profissional e engajante para: ${contentToProcess}`;
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -80,34 +148,37 @@ Diretrizes importantes:
         'X-Title': 'PostCraft - AI Content Generator',
       },
       body: JSON.stringify({
-        model: `openai/${model}`,
+        model: `${AI_MODELS[model]?.provider || 'openai'}/${model}`,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Crie o conteúdo para: ${theme}` }
+          { role: 'user', content: userPrompt }
         ],
         max_tokens: 4000,
         temperature: 0.7,
+        top_p: 0.9,
+        frequency_penalty: 0.5,
+        presence_penalty: 0.3,
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.text();
       console.error('OpenRouter API error:', errorData);
-      throw new Error(`OpenRouter API error: ${response.status}`);
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorData}`);
     }
 
     const data = await response.json();
     const generatedText = data.choices[0].message.content;
 
-    console.log('Generated text:', generatedText);
+    console.log('AI Generated text:', generatedText);
 
-    // Parse the JSON response
+    // Parse the JSON response with improved error handling
     let generatedContent;
     try {
-      // Try to extract JSON from the response (sometimes AI adds extra text)
+      // Clean and extract JSON from the response
       let jsonText = generatedText.trim();
       
-      // Look for JSON block if response has extra text
+      // Look for JSON block markers
       const jsonStart = jsonText.indexOf('{');
       const jsonEnd = jsonText.lastIndexOf('}');
       
@@ -115,33 +186,52 @@ Diretrizes importantes:
         jsonText = jsonText.slice(jsonStart, jsonEnd + 1);
       }
       
+      // Clean common AI response artifacts
+      jsonText = jsonText
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .replace(/^\s*json\s*/i, '')
+        .trim();
+      
       generatedContent = JSON.parse(jsonText);
-      console.log('Successfully parsed JSON:', generatedContent);
+      console.log('Successfully parsed AI JSON:', generatedContent);
     } catch (e) {
-      console.error('Failed to parse JSON. Raw response:', generatedText);
+      console.error('Failed to parse AI JSON. Raw response:', generatedText);
       console.error('Parse error:', e);
       
-      // Fallback: try to generate a basic response structure
+      // Smart fallback with better content extraction
+      const fallbackCaption = contentToProcess.length > 20 
+        ? `🚀 ${contentToProcess}\n\n✨ Conte-nos sua opinião nos comentários!` 
+        : `Novo conteúdo sobre ${contentToProcess}! 🎉\n\n💭 O que você achou? Compartilhe conosco!`;
+      
       generatedContent = {
-        caption: `Conteúdo sobre: ${theme}`,
-        hashtags: ['#conteudo', '#marketing', '#digital'],
+        caption: generateCaption ? fallbackCaption : undefined,
+        hashtags: generateHashtags ? [
+          '#marketing', '#conteudo', '#digital', '#socialmedia',
+          network === 'instagram' ? '#instagram' : network === 'linkedin' ? '#linkedin' : '#tiktok',
+          '#engajamento', '#criatividade'
+        ] : undefined,
         carousel_prompts: generateImages ? [
-          `Professional content about ${theme}`,
-          `Modern design related to ${theme}`,
-          `Engaging visual for ${theme}`
-        ] : []
+          `Professional ${network} post image about ${contentToProcess}`,
+          `Modern design layout for ${contentToProcess} content`,
+          `Engaging visual representation of ${contentToProcess}`
+        ] : undefined
       };
       
-      console.log('Using fallback content:', generatedContent);
+      console.log('Using enhanced fallback content:', generatedContent);
     }
 
-    // Generate images using another AI model if carousel_prompts exist
+    // Validate generated content structure
+    if (!generatedContent || typeof generatedContent !== 'object') {
+      throw new Error('Invalid content structure generated');
+    }
+
+    // Generate images using OpenRouter if requested and prompts exist
     let generatedImages = [];
-    if (generateImages && generatedContent.carousel_prompts) {
+    if (generateImages && generatedContent.carousel_prompts && Array.isArray(generatedContent.carousel_prompts)) {
       console.log('Generating images for carousel...');
       
-      // Use gpt-image-1 for image generation through OpenRouter
-      for (const prompt of generatedContent.carousel_prompts.slice(0, 5)) {
+      for (const prompt of generatedContent.carousel_prompts.slice(0, 3)) {
         try {
           const imageResponse = await fetch('https://openrouter.ai/api/v1/images/generations', {
             method: 'POST',
@@ -152,11 +242,11 @@ Diretrizes importantes:
               'X-Title': 'PostCraft - AI Image Generator',
             },
             body: JSON.stringify({
-              model: 'openai/gpt-image-1',
-              prompt: prompt,
+              model: 'openai/dall-e-3',
+              prompt: `${prompt}. High quality, professional, suitable for ${network} social media post. Aspect ratio suitable for social media.`,
               n: 1,
-              size: '1080x1080',
-              quality: 'high',
+              size: '1024x1024',
+              quality: 'hd',
             }),
           });
 
@@ -166,7 +256,7 @@ Diretrizes importantes:
               generatedImages.push({
                 prompt: prompt,
                 url: imageData.data[0].url,
-                b64_json: imageData.data[0].b64_json
+                revised_prompt: imageData.data[0].revised_prompt
               });
             }
           } else {
@@ -182,10 +272,20 @@ Diretrizes importantes:
       ...generatedContent,
       generated_images: generatedImages,
       model_used: model,
-      timestamp: new Date().toISOString()
+      model_info: AI_MODELS[model],
+      network,
+      template,
+      processing_time: Date.now(),
+      timestamp: new Date().toISOString(),
+      success: true
     };
 
-    console.log('Final result:', result);
+    console.log('Final AI result:', { 
+      success: true, 
+      contentKeys: Object.keys(generatedContent),
+      imagesCount: generatedImages.length,
+      model 
+    });
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -194,6 +294,7 @@ Diretrizes importantes:
     console.error('Error in generate-post-content function:', error);
     return new Response(JSON.stringify({ 
       error: error instanceof Error ? error.message : 'Unknown error',
+      success: false,
       timestamp: new Date().toISOString()
     }), {
       status: 500,

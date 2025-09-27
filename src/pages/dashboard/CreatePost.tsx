@@ -110,6 +110,9 @@ const CreatePost = () => {
           network: selectedNetwork,
           template: selectedTemplate,
           content: postContent,
+          objective: "Criar conteúdo engajante",
+          theme: postContent,
+          model: 'gpt-4o-mini',
           generateImages: true,
           generateCaption: true,
           generateHashtags: true
@@ -119,6 +122,12 @@ const CreatePost = () => {
       if (error) {
         console.error('Error generating content:', error);
         toast.error("Erro ao gerar conteúdo. Tente novamente.");
+        return;
+      }
+
+      if (!data?.success) {
+        console.error('AI generation failed:', data);
+        toast.error(data?.error || "Erro ao gerar conteúdo. Tente novamente.");
         return;
       }
 
