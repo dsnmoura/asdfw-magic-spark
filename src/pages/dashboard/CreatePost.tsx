@@ -105,6 +105,13 @@ const CreatePost = () => {
 
     setIsGenerating(true);
     try {
+      console.log('Calling generate-post-content with:', {
+        network: selectedNetwork,
+        template: selectedTemplate,
+        content: postContent,
+        objective: "Criar conteúdo engajante"
+      });
+
       const { data, error } = await supabase.functions.invoke('generate-post-content', {
         body: {
           network: selectedNetwork,
@@ -119,15 +126,23 @@ const CreatePost = () => {
         }
       });
 
+      console.log('Edge function response:', { data, error });
+
       if (error) {
-        console.error('Error generating content:', error);
-        toast.error("Erro ao gerar conteúdo. Tente novamente.");
+        console.error('Supabase function error:', error);
+        toast.error(`Erro na função: ${error.message || 'Erro desconhecido'}`);
         return;
       }
 
-      if (!data?.success) {
+      if (!data) {
+        console.error('No data returned from function');
+        toast.error("Nenhum dado retornado pela função");
+        return;
+      }
+
+      if (!data.success) {
         console.error('AI generation failed:', data);
-        toast.error(data?.error || "Erro ao gerar conteúdo. Tente novamente.");
+        toast.error(`Erro na IA: ${data.error || "Falha na geração de conteúdo"}`);
         return;
       }
 
@@ -135,8 +150,8 @@ const CreatePost = () => {
       setCurrentStep(4);
       toast.success("Conteúdo gerado com sucesso!");
     } catch (error) {
-      console.error('Error:', error);
-      toast.error("Erro ao gerar conteúdo. Tente novamente.");
+      console.error('Unexpected error:', error);
+      toast.error(`Erro inesperado: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     } finally {
       setIsGenerating(false);
     }

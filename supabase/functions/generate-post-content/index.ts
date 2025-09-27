@@ -29,7 +29,7 @@ const AI_MODELS: Record<string, ModelConfig> = {
     fast: false,
     cost: 'medium'
   },
-  'claude-3-sonnet': {
+  'claude-3-sonnet-20240229': {
     name: 'Claude 3 Sonnet',
     provider: 'anthropic',
     fast: true,
@@ -139,6 +139,11 @@ ${customPrompt ? `\nINSTRUÇÕES PERSONALIZADAS: ${customPrompt}` : ''}`;
 
     const userPrompt = customPrompt || `Crie conteúdo profissional e engajante para: ${contentToProcess}`;
 
+    // Determine the full model name for OpenRouter
+    const fullModelName = model.includes('/') ? model : `${AI_MODELS[model]?.provider || 'openai'}/${model}`;
+    
+    console.log('Using model:', fullModelName);
+
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -148,16 +153,13 @@ ${customPrompt ? `\nINSTRUÇÕES PERSONALIZADAS: ${customPrompt}` : ''}`;
         'X-Title': 'PostCraft - AI Content Generator',
       },
       body: JSON.stringify({
-        model: `${AI_MODELS[model]?.provider || 'openai'}/${model}`,
+        model: fullModelName,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: 4000,
+        max_tokens: 2000,
         temperature: 0.7,
-        top_p: 0.9,
-        frequency_penalty: 0.5,
-        presence_penalty: 0.3,
       }),
     });
 
